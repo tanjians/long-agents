@@ -1,0 +1,181 @@
+#!/bin/bash
+#
+# iFlow CLI Pre-Commit Hook
+# Automatically runs tests and validates commit message format
+#
+
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Get the project root directory
+PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+AGENT_DIR="$PROJECT_ROOT/.agent"
+
+echo -e "${BLUE}══════════════════════════════════════════════════════════${NC}"
+echo -e "${BLUE}        iFlow CLI Pre-Commit Hook                        ${NC}"
+echo -e "${BLUE}══════════════════════════════════════════════════════════${NC}"
+
+# Function to check if feature tests should run
+should_run_tests() {
+    # Check if test-features.sh exists
+    if [ ! -f "$AGENT_DIR/test-features.sh" ]; then
+        echo -e "${YELLOW}⚠ test-features.sh not found, skipping tests${NC}"
+        return 1
+    fi
+    
+    # Check if there are changes to .agent directory
+    if git diff --cached --name-only | grep -q "^\.agent/"; then
+        return 0
+    fi
+    
+    # Check if there are changes to shell scripts
+    if git diff --cached --name-only | grep -q "\.sh$"; then
+        return 0
+    fi
+    
+    # Default: run tests
+    return 0
+}
+
+# Function to run feature tests
+run_tests() {
+    echo -e "\n${YELLOW}▶ Running feature tests...${NC}"
+    
+    if [ -x "$AGENT_DIR/test-features.sh" ]; then
+        # Run tests and capture output
+        local output
+        output=$("$AGENT_DIR/test-features.sh" 2>&1)
+        local exit_status=$?
+        
+        echo "$output"
+        
+        # Check if any previously passing features are now failing
+        # by looking for "REGRESSION" in the output
+        if echo "$output" | grep -q "REGRESSION"; then
+            echo -e "${RED}✗ Regression detected: previously passing features are now failing${NC}"
+            return 1
+        fi
+        
+        # Check if the test script itself failed
+        if [ $exit_status -ne 0 ]; then
+            # Check if there are any failures for features that were passing
+            local features_json="$AGENT_DIR/features.json"
+            if [ -f "$features_json" ]; then
+                # Get list of features that should be passing
+                local passing_features=$(python3 -c "
+import json
+with open('$features_json') as f:
+    data = json.load(f)
+for feature in data['features']:
+    if feature.get('passes', False):
+        print(feature['id'])
+" 2>/dev/null)
+                
+                # Check if any passing feature failed in this test run
+                for feature_id in $passing_features; do
+                    if echo "$output" | grep -q "RESULT:FAILED:$feature_id"; then
+                        echo -e "${RED}✗ Regression detected: $feature_id was passing but is now failing${NC}"
+                        return 1
+                    fi
+                done
+            fi
+            
+            echo -e "${YELLOW}⚠ Some feature tests failed, but no regression in previously passing features${NC}"
+            echo -e "${GREEN}✓ Proceeding with commit${NC}"
+            return 0
+        fi
+        
+        echo -e "${GREEN}✓ All feature tests passed${NC}"
+        return 0
+    else
+        echo -e "${YELLOW}⚠ test-features.sh is not executable, skipping${NC}"
+        return 0
+    fi
+}
+
+# Function to update progress file timestamp
+update_progress_timestamp() {
+    local progress_file="$AGENT_DIR/progress.md"
+    
+    if [ -f "$progress_file" ]; then
+        # Update the last updated timestamp
+        local current_time=$(date '+%Y-%m-%d %H:%M:%S')
+        
+        # Use sed to update the timestamp if it exists, or add it
+        if grep -q "^\*\*Last Updated\*\*:" "$progress_file"; then
+            # Create a temporary file for macOS compatibility
+            local temp_file=$(mktemp)
+            sed "s/\*\*Last Updated\*\*:.*/*Last Updated*: $current_time/" "$progress_file" > "$temp_file"
+            mv "$temp_file" "$progress_file"
+            echo -e "${GREEN}✓ Updated progress file timestamp${NC}"
+        fi
+    fi
+}
+
+# Function to validate commit message format
+validate_commit_message() {
+    local commit_msg_file="$1"
+    
+    if [ ! -f "$commit_msg_file" ]; then
+        return 0
+    fi
+    
+    local commit_msg=$(cat "$commit_msg_file")
+    
+    # Check if commit message matches the expected format
+    # Format: [agent] <type>: <description>
+    # Types: feat, fix, refactor, test, docs, chore
+    local pattern='^\[agent\] (feat|fix|refactor|test|docs|chore): .+'
+    
+    if echo "$commit_msg" | grep -qE "$pattern"; then
+        echo -e "${GREEN}✓ Commit message format is valid${NC}"
+        return 0
+    else
+        echo -e "${YELLOW}⚠ Commit message does not follow the expected format${NC}"
+        echo -e "${YELLOW}Expected: [agent] <type>: <description>${NC}"
+        echo -e "${YELLOW}Types: feat, fix, refactor, test, docs, chore${NC}"
+        echo -e "${YELLOW}Example: [agent] feat: add new feature${NC}"
+        # Don't fail, just warn
+        return 0
+    fi
+}
+
+# Main execution
+main() {
+    local exit_code=0
+    
+    # Step 1: Run tests if applicable
+    if should_run_tests; then
+        if ! run_tests; then
+            exit_code=1
+        fi
+    fi
+    
+    # Step 2: Update progress timestamp
+    update_progress_timestamp
+    
+    # Step 3: Validate commit message (if commit-msg hook is also installed)
+    # This is handled by commit-msg hook, but we validate here too if the file exists
+    if [ -n "$COMMIT_MSG_FILE" ]; then
+        validate_commit_message "$COMMIT_MSG_FILE"
+    fi
+    
+    echo -e "\n${BLUE}══════════════════════════════════════════════════════════${NC}"
+    
+    if [ $exit_code -eq 0 ]; then
+        echo -e "${GREEN}✓ Pre-commit checks passed${NC}"
+    else
+        echo -e "${RED}✗ Pre-commit checks failed${NC}"
+    fi
+    
+    return $exit_code
+}
+
+# Run main function
+main

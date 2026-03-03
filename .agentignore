@@ -1,0 +1,10 @@
+# Agent-specific files to ignore
+.agent/sessions/*
+.agent/backups/*
+*.log
+.env
+.env.local
+node_modules/
+__pycache__/
+*.pyc
+.DS_Store

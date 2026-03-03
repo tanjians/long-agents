@@ -1,0 +1,45 @@
+# OpenSpec Configuration for iFlow CLI Long-Running Agents
+# This configuration integrates OpenSpec with iFlow CLI's features.json workflow
+
+schema: iflow-features
+
+context: |
+  # Project Context
+  
+  This is an iFlow CLI long-running agent environment designed for:
+  - Multi-context-window development sessions
+  - Incremental feature implementation
+  - Spec-driven development workflow
+  
+  ## Technology Stack
+  - Shell scripts (bash)
+  - Python 3.12+
+  - JSON for structured data
+  - Markdown for documentation
+  
+  ## Output Format
+  - features.json: Structured feature list for agent tracking
+  - Each feature must have: id, category, description, priority, steps, passes
+  
+  ## Development Principles
+  - Work on ONE feature at a time
+  - Test thoroughly before marking passes: true
+  - Commit with descriptive messages using [agent] prefix
+  - Update progress.md after each session
+
+rules:
+  proposal:
+    - Focus on WHY this change is needed
+    - Identify impact on existing features
+    - Estimate complexity (simple/moderate/complex)
+    - List dependencies if any
+  specs:
+    - Use clear, testable descriptions
+    - Include acceptance criteria for each spec
+    - Reference existing patterns when applicable
+    - Consider edge cases and error handling
+  tasks:
+    - Break down into atomic, verifiable steps
+    - Each step should be completable in one session
+    - Include verification steps for each task
+    - Use checkbox format for task items

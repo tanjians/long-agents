@@ -1,0 +1,18 @@
+{
+  "session_number": 2,
+  "max_context_windows": 10,
+  "auto_commit": true,
+  "test_before_feature": true,
+  "incremental_mode": true,
+  "testing": {
+    "browser_automation": false,
+    "unit_tests": true,
+    "integration_tests": true,
+    "e2e_tests": false
+  },
+  "git": {
+    "auto_commit": true,
+    "commit_prefix": "[agent]",
+    "branch_strategy": "feature"
+  }
+}
